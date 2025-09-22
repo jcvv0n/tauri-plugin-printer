@@ -8,6 +8,13 @@ use std::env;
 use std::path::{Path, PathBuf};
 use crate::declare::{PrintOptions, PrintHtmlOptions};
 use crate::{ fsys::remove_file};
+use serde::{Serialize, Deserialize};
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Printer {
+    pub driver_name: String,
+}
+
 /**
  * Create sm.exe to temp
  */
@@ -41,23 +48,63 @@ pub fn get_printers() -> String {
 
     // Spawn a new thread
     thread::spawn(move || {
-        // let output: tauri_plugin_shell::process::Output = Command::new("powershell").args(["Get-Printer | Select-Object Name, DriverName, JobCount, PrintProcessor, PortName, ShareName, ComputerName, PrinterStatus, Shared, Type, Priority | ConvertTo-Json"]).output().unwrap();
-
         let output = Command::new("powershell")
-            .args(["-Command", "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Printer | Select-Object Name, DriverName, JobCount, PrintProcessor, PortName, ShareName, ComputerName, PrinterStatus, Shared, Type, Priority | ConvertTo-Json"])
+            .args(["-Command", "wmic printer get DriverName /format:csv"])
             .output().unwrap();
         
         let output_string = String::from_utf8_lossy(&output.stdout).to_string();
         sender.send(output_string).unwrap();
     });
 
-    // Do other non-blocking work on the main thread
+    let csv = match output {
+        Ok(output) => {
+            if !output.status.success() {
+                return "[]".to_string();
+            }
+            match String::from_utf8_lossy(&output.stdout) {
+                s if s.is_empty() => return "[]".to_string(),
+                s => s,
+            }
+        }
+        Err(_) => return "[]".to_string(),
+    };
 
-    // Receive the result from the spawned thread
-    let result: String = receiver.recv().unwrap();
+    let lines: Vec<&str> = csv.lines().collect();
+    if lines.len() <= 1 {
+        return "[]".to_string(); // 无数据
+    }
 
+    let headers: Vec<&str> = lines[0]
+        .split(',')
+        .map(|s| s.trim())
+        .collect();
 
-    return result;
+    let mut printers = Vec::new();
+
+    for line in lines.iter().skip(1).filter(|l| !l.is_empty()) {
+        let values: Vec<&str> = line
+            .split(',')
+            .map(|s| s.trim())
+            .collect();
+
+        if values.len() != headers.len() {
+            continue; // 跳过格式错误行
+        }
+
+        let driver_name = values[1].trim_matches('"');
+
+        // 构造单个打印机对象
+        let printer = serde_json::json!({
+            "driver_name": driver_name
+        });
+
+        printers.push(printer);
+    }
+
+    match serde_json::to_string(&printers) {
+        Ok(json) => json,
+        Err(_) => "[]".to_string(), // 序列化失败，返回空数组
+    }
 }
 
 /**
