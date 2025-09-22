@@ -50,7 +50,7 @@ pub fn get_printers() -> String {
     // Spawn a new thread
     thread::spawn(move || {
         let output = Command::new("powershell")
-            .args(["-Command", "wmic printer get DriverName /format:csv"])
+            .args(["-WindowStyle", "Hidden", "-Command", "wmic printer get DriverName /format:csv"])
             .output();
 
         let output_string = match output {
