@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use crate::declare::{PrintOptions, PrintHtmlOptions};
 use crate::{ fsys::remove_file};
 use serde::{Serialize, Deserialize};
+use serde_json::{self, json};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Printer {
