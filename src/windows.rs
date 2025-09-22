@@ -51,24 +51,23 @@ pub fn get_printers() -> String {
     thread::spawn(move || {
         let output = Command::new("powershell")
             .args(["-Command", "wmic printer get DriverName /format:csv"])
-            .output().unwrap();
+            .output();
+
+        let output_string = match output {
+            Ok(output) => {
+                if !output.status.success() {
+                    "[]".to_string()
+                } else {
+                    String::from_utf8_lossy(&output.stdout).to_string()
+                }
+            }
+            Err(_) => "[]".to_string(),
+        };
         
-        let output_string = String::from_utf8_lossy(&output.stdout).to_string();
         sender.send(output_string).unwrap();
     });
 
-    let csv = match output {
-        Ok(output) => {
-            if !output.status.success() {
-                return "[]".to_string();
-            }
-            match String::from_utf8_lossy(&output.stdout) {
-                s if s.is_empty() => return "[]".to_string(),
-                s => s,
-            }
-        }
-        Err(_) => return "[]".to_string(),
-    };
+    let csv = receiver.recv().unwrap();
 
     let lines: Vec<&str> = csv.lines().collect();
     if lines.len() <= 1 {
