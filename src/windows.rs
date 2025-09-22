@@ -70,18 +70,22 @@ pub fn get_printers() -> String {
     let csv = receiver.recv().unwrap();
 
     let lines: Vec<&str> = csv.lines().collect();
-    if lines.len() <= 1 {
-        return "[]".to_string(); // 无数据
+
+    // 跳过空行并确保有足够的数据行
+    let non_empty_lines: Vec<&str> = lines.into_iter().filter(|line| !line.trim().is_empty()).collect();
+
+    if non_empty_lines.len() <= 1 {
+        return "[]".to_string();
     }
 
-    let headers: Vec<&str> = lines[0]
+    let headers: Vec<&str> = non_empty_lines[0]
         .split(',')
         .map(|s| s.trim())
         .collect();
 
     let mut printers = Vec::new();
 
-    for line in lines.iter().skip(1).filter(|l| !l.is_empty()) {
+    for line in non_empty_lines.iter().skip(1) {
         let values: Vec<&str> = line
             .split(',')
             .map(|s| s.trim())
@@ -91,7 +95,12 @@ pub fn get_printers() -> String {
             continue; // 跳过格式错误行
         }
 
-        let driver_name = values[1].trim_matches('"');
+        let driver_name = values[1].trim();
+        let driver_name = if driver_name.starts_with('"') && driver_name.ends_with('"') {
+            &driver_name[1..driver_name.len()-1]
+        } else {
+            driver_name
+        };
 
         // 构造单个打印机对象
         let printer = serde_json::json!({
